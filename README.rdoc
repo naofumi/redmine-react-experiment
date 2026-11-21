@@ -3,3 +3,15 @@
 Redmine is a flexible project management web application written using Ruby on Rails framework.
 
 More details can be found in the doc directory or on the official website https://www.redmine.org
+
+This fork's {React migration charter}[doc/react-migration-charter.md] describes the experiment and its first two workflows.
+
+The {verification record}[doc/react-migration-verification.md] contains the scenarios, fixtures, and observed results.
+After the usual Redmine database and Bundler setup, run the following from the project root to build the React pages and exercise both workflows:
+
+  yarn install --frozen-lockfile
+  yarn build
+  yarn typecheck
+  GOOGLE_CHROME_OPTS_ARGS=--headless bin/rails test test/system/issue_editor_migration_test.rb test/system/issue_list_migration_test.rb
+
+Run +yarn build+ again after editing TypeScript. Rails asset precompilation also builds the bundle.

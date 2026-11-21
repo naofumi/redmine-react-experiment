@@ -1252,6 +1252,7 @@ en:
   button_add: Add
   button_add_to_group: Add to group
   button_change: Change
+  notice_issue_editor_refresh_failed: "The issue fields could not be updated. Try again before saving."
   button_apply: Apply
   button_clear: Clear
   button_lock: Lock

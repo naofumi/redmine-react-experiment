@@ -31,6 +31,8 @@ class IssuesController < ApplicationController
   rescue_from Query::StatementInvalid, :with => :query_statement_invalid
   rescue_from Query::QueryError, :with => :query_error
 
+  helper :issue_editor
+  helper :issue_list
   helper :journals
   helper :projects
   helper :custom_fields
@@ -58,7 +60,7 @@ class IssuesController < ApplicationController
           @issue_count = @query.issue_count
           @issue_pages = Paginator.new @issue_count, per_page_option, params['page']
           @issues = @query.issues(:offset => @issue_pages.offset, :limit => @issue_pages.per_page)
-          render :layout => !request.xhr?
+          render_issue_list
         end
         format.api do
           @offset, @limit = api_offset_and_limit
@@ -90,7 +92,7 @@ class IssuesController < ApplicationController
       end
     else
       respond_to do |format|
-        format.html {render :layout => !request.xhr?}
+        format.html {render_issue_list}
         format.any(:atom, :csv, :pdf) {head :unprocessable_content}
         format.api {render_validation_errors(@query)}
       end
@@ -134,6 +136,7 @@ class IssuesController < ApplicationController
         @relation = IssueRelation.new
         @has_changesets = @issue.changesets.visible.preload(:repository, :user).exists?
         retrieve_previous_and_next_issue_ids
+        @editor_props = view_context.issue_editor_props if @issue.editable?
         render :template => 'issues/show'
       end
       format.api do
@@ -201,8 +204,15 @@ class IssuesController < ApplicationController
   def edit
     return unless update_issue_from_params
 
+    if request.patch? && request.headers['X-Redmine-Editor'] == 'fields' && !api_request?
+      # Rich text, custom formats and uploads still use their HTML widget templates.
+      self.formats = [:html]
+      render json: view_context.issue_editor_schema
+      return
+    end
+
     respond_to do |format|
-      format.html {}
+      format.html {render_issue_editor}
       format.js
     end
   end
@@ -248,7 +258,7 @@ class IssuesController < ApplicationController
       end
     else
       respond_to do |format|
-        format.html {render :action => 'edit'}
+        format.html {render_issue_editor}
         format.api  {render_validation_errors(@issue)}
       end
     end
@@ -567,6 +577,18 @@ class IssuesController < ApplicationController
       :issue_position => params[:issue_position],
       :issue_count => params[:issue_count]
     }.reject {|k, v| k.blank?}
+  end
+
+  def render_issue_list
+    if request.xhr? && !request.inertia?
+      render :index, layout: false
+    else
+      render inertia: 'Issues/Index', props: view_context.issue_list_props, layout: 'issue_list'
+    end
+  end
+
+  def render_issue_editor
+    render inertia: 'Issues/Edit', props: view_context.issue_editor_props, layout: 'issue_editor'
   end
 
   # Used by #edit and #update to set some common instance variables

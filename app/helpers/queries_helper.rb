@@ -205,6 +205,18 @@ module QueriesHelper
   end
 
   def column_header(query, column, options={})
+    if (sort = query_column_header_sort(query, column, options))
+      content = link_to(
+        sort[:icon] ? sprite_icon(sort[:icon], column.caption) : column.caption,
+        sort[:url], sort[:link_options]
+      )
+    else
+      content = column.caption
+    end
+    content_tag('th', content, :class => column.css_classes)
+  end
+
+  def query_column_header_sort(query, column, options={})
     if column.sortable?
       css, order = nil, column.default_order
       if column.name.to_s == query.sort_criteria.first_key
@@ -228,16 +240,12 @@ module QueriesHelper
       if options[:sort_link_options]
         link_options.merge! options[:sort_link_options]
       end
-      content =
-        link_to(
-          icon ? sprite_icon(icon, column.caption) : column.caption,
-          {:params => request.query_parameters.deep_merge(sort_param)},
-          link_options
-        )
-    else
-      content = column.caption
+      {
+        icon: icon,
+        url: {:params => request.query_parameters.deep_merge(sort_param)},
+        link_options: link_options
+      }
     end
-    content_tag('th', content, :class => column.css_classes)
   end
 
   def column_content(column, item)

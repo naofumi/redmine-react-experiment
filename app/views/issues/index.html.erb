@@ -25,15 +25,18 @@
   <%= render :partial => 'queries/query_form' %>
 <% end %>
 
-<% if @query.valid? %>
-<% if @issues.empty? %>
+<% valid_query = @query.valid? %>
+<%= render_query_totals(@query) if valid_query && @issues.any? %>
+<% if local_assigns.key?(:results) %>
+<%= results %>
+<% elsif valid_query && @issues.empty? %>
 <p class="nodata"><%= l(:label_no_data) %></p>
-<% else %>
-<%= render_query_totals(@query) %>
+<% elsif valid_query %>
 <%= render :partial => 'issues/list', :locals => {:issues => @issues, :query => @query} %>
 <span class="pagination"><%= pagination_links_full @issue_pages, @issue_count %></span>
 <% end %>
 
+<% if valid_query %>
 <% export_allowed = export_allowed?(:export_issues, @query.base_scope) %>
 <% other_formats_links do |f| %>
   <% if export_allowed %>

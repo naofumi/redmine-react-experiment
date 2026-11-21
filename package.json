@@ -1,6 +1,18 @@
 {
-  "dependencies": {},
+  "scripts": {
+    "build": "esbuild app/frontend/application.tsx --bundle --minify --outfile=app/assets/builds/issue_editor.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@inertiajs/react": "3.2.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
   "devDependencies": {
-    "stylelint": "^16.10.0"
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "esbuild": "^0.28.2",
+    "stylelint": "^16.10.0",
+    "typescript": "~5.9.3"
   }
 }
