@@ -258,5 +258,5 @@ function window_size() {
 
 $(document).ready(function(){
   contextMenuInit();
-  $('input[type=checkbox].toggle-selection').on('change', toggleIssuesSelection);
+  $(document).on('change', 'input[type=checkbox].toggle-selection', toggleIssuesSelection);
 });

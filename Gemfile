@@ -20,6 +20,8 @@ gem 'propshaft', '~> 1.3.0'
 gem 'rack', '>= 3.1.3'
 gem "stimulus-rails", "~> 1.3"
 gem "importmap-rails", "~> 2.0"
+gem 'jsbundling-rails', '~> 1.3'
+gem 'inertia_rails', '~> 3.21.0'
 gem 'commonmarker', '~> 2.10.0'
 gem 'doorkeeper', '~> 5.9.6'
 gem "bcrypt", require: false

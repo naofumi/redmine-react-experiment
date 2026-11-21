@@ -133,11 +133,11 @@ class IssuesTest < Redmine::IntegrationTest
 
     get '/issues/1'
     assert_response :success
-    assert_select 'div#new-attachments', 1
+    assert_select Nokogiri::HTML.fragment(editor_schema.fetch('attachmentsHtml')), 'div#new-attachments', 1
 
     get '/issues/1/edit'
     assert_response :success
-    assert_select 'div#new-attachments', 1
+    assert_select Nokogiri::HTML.fragment(editor_schema.fetch('attachmentsHtml')), 'div#new-attachments', 1
 
     role.remove_permission! :edit_issues
     role.add_permission! :edit_own_issues
@@ -145,11 +145,11 @@ class IssuesTest < Redmine::IntegrationTest
 
     get '/issues/1'
     assert_response :success
-    assert_select 'div#new-attachments', 1
+    assert_select Nokogiri::HTML.fragment(editor_schema.fetch('attachmentsHtml')), 'div#new-attachments', 1
 
     get '/issues/1/edit'
     assert_response :success
-    assert_select 'div#new-attachments', 1
+    assert_select Nokogiri::HTML.fragment(editor_schema.fetch('attachmentsHtml')), 'div#new-attachments', 1
 
     role.remove_permission! :edit_issues
     role.remove_permission! :edit_own_issues
@@ -157,11 +157,11 @@ class IssuesTest < Redmine::IntegrationTest
 
     get '/issues/1'
     assert_response :success
-    assert_select 'div#new-attachments', 1
+    assert_select Nokogiri::HTML.fragment(editor_schema.fetch('attachmentsHtml')), 'div#new-attachments', 1
 
     get '/issues/1/edit'
     assert_response :success
-    assert_select 'div#new-attachments', 1
+    assert_select Nokogiri::HTML.fragment(editor_schema.fetch('attachmentsHtml')), 'div#new-attachments', 1
   end
 
   def test_edit_check_permission_for_add_attachment
@@ -201,7 +201,7 @@ class IssuesTest < Redmine::IntegrationTest
     with_settings :default_language => 'en' do
       get '/projects/ecookbook/issues?set_filter=1&group_by=fixed_version&sort=priority:desc,fixed_version,id'
       assert_response :success
-      assert_select 'td.id', :text => '5'
+      assert_includes issue_list_row_ids, 5
 
       get '/issues/5'
       assert_response :success
@@ -213,7 +213,7 @@ class IssuesTest < Redmine::IntegrationTest
     with_settings :default_language => 'en' do
       get '/projects/ecookbook/issues?set_filter=1&tracker_id=1'
       assert_response :success
-      assert_select 'td.id', :text => '5'
+      assert_includes issue_list_row_ids, 5
 
       get '/issues/5'
       assert_response :success
@@ -232,7 +232,7 @@ class IssuesTest < Redmine::IntegrationTest
     with_settings :default_language => 'en' do
       get "/projects/ecookbook/issues?set_filter=1&query_id=#{query.id}"
       assert_response :success
-      assert_select 'td.id', :text => '5'
+      assert_includes issue_list_row_ids, 5
 
       get '/issues/5'
       assert_response :success
@@ -259,7 +259,7 @@ class IssuesTest < Redmine::IntegrationTest
     with_settings :per_page_options => '2' do
       get '/projects/ecookbook/issues'
 
-      assert_select 'a[href=?]', '/projects/ecookbook/issues?page=2', :text => '2'
+      assert_equal '/projects/ecookbook/issues?page=2', issue_list_page_link(2)
     end
   end
 
@@ -267,7 +267,7 @@ class IssuesTest < Redmine::IntegrationTest
     with_settings :per_page_options => '2' do
       get '/projects/ecookbook/issues?foo=bar'
 
-      assert_select 'a[href=?]', '/projects/ecookbook/issues?foo=bar&page=2', :text => '2'
+      assert_equal '/projects/ecookbook/issues?foo=bar&page=2', issue_list_page_link(2)
     end
   end
 
@@ -275,26 +275,26 @@ class IssuesTest < Redmine::IntegrationTest
     with_settings :per_page_options => '2' do
       get '/projects/ecookbook/issues?host=foo'
 
-      assert_select 'a[href=?]', '/projects/ecookbook/issues?host=foo&page=2', :text => '2'
+      assert_equal '/projects/ecookbook/issues?host=foo&page=2', issue_list_page_link(2)
     end
   end
 
   def test_sort_links_on_index
     get '/projects/ecookbook/issues'
 
-    assert_select 'a[href=?]', '/projects/ecookbook/issues?sort=subject%2Cid%3Adesc', :text => 'Subject'
+    assert_equal '/projects/ecookbook/issues?sort=subject%2Cid%3Adesc', issue_list_sort_link('subject')
   end
 
   def test_sort_links_should_preserve_query_parameters
     get '/projects/ecookbook/issues?foo=bar'
 
-    assert_select 'a[href=?]', '/projects/ecookbook/issues?foo=bar&sort=subject%2Cid%3Adesc', :text => 'Subject'
+    assert_equal '/projects/ecookbook/issues?foo=bar&sort=subject%2Cid%3Adesc', issue_list_sort_link('subject')
   end
 
   def test_sort_links_should_not_use_params_as_url_options
     get '/projects/ecookbook/issues?host=foo'
 
-    assert_select 'a[href=?]', '/projects/ecookbook/issues?host=foo&sort=subject%2Cid%3Adesc', :text => 'Subject'
+    assert_equal '/projects/ecookbook/issues?host=foo&sort=subject%2Cid%3Adesc', issue_list_sort_link('subject')
   end
 
   def test_issue_with_user_custom_field
@@ -333,7 +333,8 @@ class IssuesTest < Redmine::IntegrationTest
       assert_select '.label', :text => 'Tester:'
       assert_select '.value', :text => tester.name
     end
-    assert_select 'select[name=?]', "issue[custom_field_values][#{@field.id}]" do
+    field = editor_schema.fetch('customFields').find {|f| f.fetch('id') == @field.id}
+    assert_select Nokogiri::HTML.fragment(field.fetch('html')), 'select[name=?]', "issue[custom_field_values][#{@field.id}]" do
       assert_select 'option', users.size + 1 # +1 for blank value
       assert_select 'option[value=?][selected=selected]', tester.id.to_s, :text => tester.name
     end
@@ -390,5 +391,45 @@ class IssuesTest < Redmine::IntegrationTest
     }
 
     assert_response :not_found
+  end
+
+  def test_index_with_an_incomplete_filter_preserves_query_errors
+    get '/projects/ecookbook/issues', params: {
+      set_filter: '1', f: ['subject'], op: {subject: '~'}, v: {subject: ['']}
+    }
+
+    assert_response :success
+    assert_select '#query_form #errorExplanation li', text: /Subject/
+    assert_nil issue_list_results
+  end
+
+  private
+
+  def issue_list_results
+    page = JSON.parse(css_select('script[type="application/json"][data-page]').sole.content)
+    assert_equal 'Issues/Index', page.fetch('component')
+    page.fetch('props').fetch('results')
+  end
+
+  def issue_list_row_ids
+    issue_list_results.fetch('groups').flat_map {|group| group.fetch('rows')}.pluck('id')
+  end
+
+  def issue_list_page_link(number)
+    issue_list_results.fetch('pagination').fetch('pages').find {|page| page.fetch('number') == number}.fetch('href')
+  end
+
+  def issue_list_sort_link(key)
+    issue_list_results.fetch('columns').find {|column| column.fetch('key') == key}.dig('sort', 'href')
+  end
+
+  def editor_schema
+    if (embedded = css_select('[data-issue-editor]').first)
+      JSON.parse(embedded['data-issue-editor']).fetch('schema')
+    else
+      page = JSON.parse(css_select('script[data-page="app"]').first.content)
+      assert_equal 'Issues/Edit', page.fetch('component')
+      page.fetch('props').fetch('schema')
+    end
   end
 end

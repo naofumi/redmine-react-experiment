@@ -5,6 +5,7 @@
 <% if @issue.editable? %>
   <div id="update" style="display:none;">
     <h3><%= l(:button_edit) %></h3>
-    <%= render :partial => 'edit' %>
+    <%= tag.div data: {issue_editor: @editor_props} %>
+    <%= render 'issues/editor_assets' %>
   </div>
 <% end %>

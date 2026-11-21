@@ -618,7 +618,8 @@ table.issues td.block_column {
   white-space:normal;
 }
 table.issues td.block_column>span {font-weight: bold; display: block; margin-block-end: 4px;}
-table.issues td.block_column>pre {white-space:normal;}
+table.issues td.block_column>pre,
+table.issues td.block_column .block-content>pre {white-space:normal;}
 
 tr.idnt :is(td.subject, td.name) {background: url(/chevron-right-idnt.svg) no-repeat 2px center;}
 [dir="rtl"] tr.idnt :is(td.subject, td.name) {background: url(/chevron-left-idnt.svg) no-repeat right 2px center;}
@@ -717,6 +718,7 @@ tr.group td {
 }
 tr.group span.count {inset-block-start: -1px;}
 tr.group span.name {font-weight:bold;}
+table.issues tr.group button.expander {background:none; border:0; padding:0; margin-inline-end:4px; cursor:pointer;}
 tr.group span.totals {color: var(--color-text-muted); font-size: 93%;}
 tr.group span.totals .value {font-weight:bold; color:var(--color-text-muted);}
 tr.group a.toggle-all { color: var(--color-text-muted); font-size: 93%; display: none; float: inline-end; margin-inline-end: 4px;}
@@ -988,7 +990,7 @@ div#sticky-issue-header .subject {
 #issue_tree .issue > td.assigned_to, #relations .issue > td.assigned_to {
   white-space: nowrap;
 }
-#trackers_description, #issue_statuses_description {display:none;}
+#trackers_description:not([open]), #issue_statuses_description:not([open]) {display:none;}
 #trackers_description dt, #issue_statuses_description dt {font-weight: bold; text-decoration: underline;}
 #trackers_description dd, #issue_statuses_description dd {margin: 0; padding-block: 0 1em; padding-inline: 0;}
 

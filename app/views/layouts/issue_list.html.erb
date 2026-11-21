@@ -1,0 +1,2 @@
+<% content_for(:header_tags) { javascript_include_tag 'issue_editor', defer: true } %>
+<%= render template: 'issues/index', layout: 'layouts/base', locals: {results: yield} %>

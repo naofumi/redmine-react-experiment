@@ -1,3 +1,12 @@
 hideModal();
 <% select = content_tag('select', content_tag('option') + options_from_collection_for_select(@project.issue_categories, 'id', 'name', @category.id), :id => 'issue_category_id', :name => 'issue[category_id]') %>
-$('#issue_category_id').replaceWith('<%= escape_javascript(select) %>');
+var issueField = document.getElementById('issue_category_id');
+if (issueField && issueField.hasAttribute('data-react-issue-field')) {
+  var options = document.createElement('template');
+  options.innerHTML = '<%= escape_javascript(select) %>';
+  issueField.dispatchEvent(new CustomEvent('redmine:issue-field-options', {
+    detail: { optionsHtml: options.content.firstElementChild.innerHTML, value: '<%= @category.id %>' }
+  }));
+} else {
+  $('#issue_category_id').replaceWith('<%= escape_javascript(select) %>');
+}

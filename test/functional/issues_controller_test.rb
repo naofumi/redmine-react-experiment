@@ -32,13 +32,13 @@ class IssuesControllerTest < Redmine::ControllerTest
       assert_response :success
 
       # links to visible issues
-      assert_select 'a[href="/issues/1"]', :text => /Cannot print recipes/
-      assert_select 'a[href="/issues/5"]', :text => /Subproject issue/
+      assert_issue_list_link 1, 'Cannot print recipes'
+      assert_issue_list_link 5, 'Subproject issue'
       # private projects hidden
-      assert_select 'a[href="/issues/6"]', 0
-      assert_select 'a[href="/issues/4"]', 0
+      assert_not_includes issue_list_rows.pluck('id'), 6
+      assert_not_includes issue_list_rows.pluck('id'), 4
       # project column
-      assert_select 'th', :text => /Project/
+      assert_includes columns_in_issues_list, 'Project'
     end
   end
 
@@ -47,8 +47,8 @@ class IssuesControllerTest < Redmine::ControllerTest
     get :index
     assert_response :success
 
-    assert_select 'a[href="/issues/1"]', 0
-    assert_select 'a[href="/issues/5"]', :text => /Subproject issue/
+    assert_not_includes issue_list_rows.pluck('id'), 1
+    assert_issue_list_link 5, 'Subproject issue'
   end
 
   def test_index_should_list_visible_issues_only
@@ -56,7 +56,7 @@ class IssuesControllerTest < Redmine::ControllerTest
     assert_response :success
 
     Issue.open.each do |issue|
-      assert_select "tr#issue-#{issue.id}", issue.visible? ? 1 : 0
+      assert_equal issue.visible?, issue_list_rows.pluck('id').include?(issue.id)
     end
   end
 
@@ -75,8 +75,8 @@ class IssuesControllerTest < Redmine::ControllerTest
           assert_select 'p.buttons'
         end
       end
-      assert_select 'a[href="/issues/1"]', :text => /Cannot print recipes/
-      assert_select 'a[href="/issues/5"]', 0
+      assert_issue_list_link 1, 'Cannot print recipes'
+      assert_not_includes issue_list_rows.pluck('id'), 5
     end
   end
 
@@ -85,9 +85,9 @@ class IssuesControllerTest < Redmine::ControllerTest
       get(:index, :params => {:project_id => 1})
       assert_response :success
 
-      assert_select 'a[href="/issues/1"]', :text => /Cannot print recipes/
-      assert_select 'a[href="/issues/5"]', :text => /Subproject issue/
-      assert_select 'a[href="/issues/6"]', 0
+      assert_issue_list_link 1, 'Cannot print recipes'
+      assert_issue_list_link 5, 'Subproject issue'
+      assert_not_includes issue_list_rows.pluck('id'), 6
     end
   end
 
@@ -140,9 +140,9 @@ class IssuesControllerTest < Redmine::ControllerTest
       get(:index, :params => {:project_id => 1})
       assert_response :success
 
-      assert_select 'a[href="/issues/1"]', :text => /Cannot print recipes/
-      assert_select 'a[href="/issues/5"]', :text => /Subproject issue/
-      assert_select 'a[href="/issues/6"]', :text => /Issue of a private subproject/
+      assert_issue_list_link 1, 'Cannot print recipes'
+      assert_issue_list_link 5, 'Subproject issue'
+      assert_issue_list_link 6, 'Issue of a private subproject'
     end
   end
 
@@ -199,7 +199,7 @@ class IssuesControllerTest < Redmine::ControllerTest
                            '"one", "two", "print", "<script>alert(1)</script>", "three"'
     assert_not_include '<script>alert(1)</script>', response.body
     # Issues are still displayed using the first 5 tokens
-    assert_select 'table.issues tr.issue'
+    assert_not_empty issue_list_rows
   end
 
   def test_index_with_short_filters
@@ -379,7 +379,7 @@ class IssuesControllerTest < Redmine::ControllerTest
       }
     )
     assert_response :success
-    assert_select 'tr.group span.count'
+    assert issue_list_groups.any? {|group| group.fetch('count')}
   end
 
   def test_index_with_query_grouped_and_sorted_by_category
@@ -393,7 +393,7 @@ class IssuesControllerTest < Redmine::ControllerTest
       }
     )
     assert_response :success
-    assert_select 'tr.group span.count'
+    assert issue_list_groups.any? {|group| group.fetch('count')}
   end
 
   def test_index_with_query_grouped_and_sorted_by_fixed_version
@@ -407,7 +407,7 @@ class IssuesControllerTest < Redmine::ControllerTest
       }
     )
     assert_response :success
-    assert_select 'tr.group span.count'
+    assert issue_list_groups.any? {|group| group.fetch('count')}
   end
 
   def test_index_with_query_grouped_and_sorted_by_fixed_version_in_reverse_order
@@ -421,7 +421,7 @@ class IssuesControllerTest < Redmine::ControllerTest
       }
     )
     assert_response :success
-    assert_select 'tr.group span.count'
+    assert issue_list_groups.any? {|group| group.fetch('count')}
   end
 
   def test_index_grouped_by_due_date
@@ -439,12 +439,8 @@ class IssuesControllerTest < Redmine::ControllerTest
       }
     )
     assert_response :success
-    assert_select 'tr.group span.name', :value => '2018-08-10' do
-      assert_select '~ span.count', :value => '2'
-    end
-    assert_select 'tr.group span.name', :value => '(blank)' do
-      assert_select '~ span.count', :value => '1'
-    end
+    assert_equal 2, issue_list_group(format_date(Date.new(2018, 8, 10))).fetch('count')
+    assert_equal 1, issue_list_group('(blank)').fetch('count')
   end
 
   def test_index_grouped_by_created_on_if_time_zone_is_utc
@@ -464,9 +460,7 @@ class IssuesControllerTest < Redmine::ControllerTest
     )
     assert_response :success
 
-    assert_select 'tr.group span.name', :text => '07/19/2006' do
-      assert_select '+ span.count', :text => '2'
-    end
+    assert_equal 2, issue_list_group('07/19/2006').fetch('count')
   end
 
   def test_index_grouped_by_created_on_if_time_zone_is_nil
@@ -486,9 +480,7 @@ class IssuesControllerTest < Redmine::ControllerTest
 
     # group_name depends on localtime
     group_name = format_date(Issue.second.created_on.localtime)
-    assert_select 'tr.group span.name', :text => group_name do
-      assert_select '+ span.count', :text => '2'
-    end
+    assert_equal 2, issue_list_group(group_name).fetch('count')
   end
 
   def test_index_grouped_by_created_on_as_pdf
@@ -515,7 +507,7 @@ class IssuesControllerTest < Redmine::ControllerTest
       }
     )
     assert_response :success
-    assert_select 'tr.group span.count'
+    assert issue_list_groups.any? {|group| group.fetch('count')}
   end
 
   def test_index_with_query_grouped_by_key_value_custom_field
@@ -543,15 +535,9 @@ class IssuesControllerTest < Redmine::ControllerTest
     )
     assert_response :success
 
-    assert_select 'tr.group', 3
-    assert_select 'tr.group' do
-      assert_select 'span.name', :text => 'Value B'
-      assert_select 'span.count', :text => '2'
-    end
-    assert_select 'tr.group' do
-      assert_select 'span.name', :text => 'Value A'
-      assert_select 'span.count', :text => '1'
-    end
+    assert_equal 3, issue_list_groups.size
+    assert_equal 2, issue_list_group('Value B').fetch('count')
+    assert_equal 1, issue_list_group('Value A').fetch('count')
   end
 
   def test_index_with_query_grouped_by_user_custom_field
@@ -577,15 +563,13 @@ class IssuesControllerTest < Redmine::ControllerTest
     )
     assert_response :success
 
-    assert_select 'tr.group', 3
-    assert_select 'tr.group' do
-      assert_select 'a', :text => 'John Smith'
-      assert_select 'span.count', :text => '1'
-    end
-    assert_select 'tr.group' do
-      assert_select 'a', :text => 'Dave Lopper'
-      assert_select 'span.count', :text => '2'
-    end
+    assert_equal 3, issue_list_groups.size
+    john = issue_list_group('John Smith')
+    dave = issue_list_group('Dave Lopper')
+    assert_equal 1, john.fetch('count')
+    assert_equal 2, dave.fetch('count')
+    assert Nokogiri::HTML.fragment(john.fetch('name')).at_css('a[href="/users/2"]')
+    assert Nokogiri::HTML.fragment(dave.fetch('name')).at_css('a[href="/users/3"]')
   end
 
   def test_index_grouped_by_boolean_custom_field_should_distinguish_blank_and_false_values
@@ -612,10 +596,7 @@ class IssuesControllerTest < Redmine::ControllerTest
       assert_response :success
     end
 
-    assert_select 'tr.group', 3
-    assert_select 'tr.group', :text => /Yes/
-    assert_select 'tr.group', :text => /No/
-    assert_select 'tr.group', :text => /blank/
+    assert_equal ['(blank)', 'No', 'Yes'], issue_list_groups.pluck('name').sort
   end
 
   def test_index_grouped_by_boolean_custom_field_with_false_group_in_first_position_should_show_the_group
@@ -643,8 +624,7 @@ class IssuesControllerTest < Redmine::ControllerTest
     end
 
     assert_equal [1, 2], issues_in_list.map(&:id).sort
-    assert_select 'tr.group', 1
-    assert_select 'tr.group', :text => /No/
+    assert_equal ['No'], issue_list_groups.pluck('name')
   end
 
   def test_index_with_query_grouped_by_tracker_in_normal_order
@@ -659,7 +639,7 @@ class IssuesControllerTest < Redmine::ControllerTest
     )
     assert_response :success
     assert_equal ["Bug", "Feature request", "Support request"],
-                 css_select("tr.issue td.tracker").map(&:text).uniq
+                 columns_values_in_list('tracker').uniq
   end
 
   def test_index_with_query_grouped_by_tracker_in_reverse_order
@@ -675,7 +655,7 @@ class IssuesControllerTest < Redmine::ControllerTest
     )
     assert_response :success
     assert_equal ["Bug", "Feature request", "Support request"].reverse,
-                 css_select("tr.issue td.tracker").map(&:text).uniq
+                 columns_values_in_list('tracker').uniq
   end
 
   def test_index_with_query_id_and_project_id_should_set_session_query
@@ -717,7 +697,7 @@ class IssuesControllerTest < Redmine::ControllerTest
     assert_response :success
 
     assert_select 'h2', :text => q.name
-    assert_equal ["eCookbook"], css_select("tr.issue td.project").map(&:text).uniq
+    assert_equal ["eCookbook"], columns_values_in_list('project').uniq
   end
 
   def test_private_query_should_not_be_available_to_other_users
@@ -1293,7 +1273,7 @@ class IssuesControllerTest < Redmine::ControllerTest
       }
     )
     assert_response :success
-    assert_select 'input[name=back_url][value=?]', '/projects/ecookbook/issues?foo=bar'
+    assert_equal '/projects/ecookbook/issues?foo=bar', issue_list_results.fetch('backUrl')
   end
 
   def test_index_sort
@@ -1303,13 +1283,12 @@ class IssuesControllerTest < Redmine::ControllerTest
       issues_in_list.sort_by {|issue| [issue.tracker.position, -issue.id]},
       issues_in_list
     )
-    assert_select 'table.issues.sort-by-tracker.sort-asc'
+    assert_includes issue_list_results.fetch('tableClass').split, 'sort-by-tracker'
+    assert_includes issue_list_results.fetch('tableClass').split, 'sort-asc'
 
     # Ensure that only the primary sort key column has a sort order icon
-    assert_select 'table.issues th.tracker svg', 1
-    css_select('table.issues th:not(.tracker)').each do |th|
-      assert_select th, 'svg', 0
-    end
+    sorted_columns = issue_list_columns.select {|column| column.dig('sort', 'icon').present?}
+    assert_equal ['tracker'], sorted_columns.pluck('key')
   end
 
   def test_index_sort_by_field_not_included_in_columns
@@ -1325,7 +1304,8 @@ class IssuesControllerTest < Redmine::ControllerTest
 
     assignees = issues_in_list.filter_map(&:assigned_to)
     assert_equal assignees.sort, assignees
-    assert_select 'table.issues.sort-by-assigned-to.sort-asc'
+    assert_includes issue_list_results.fetch('tableClass').split, 'sort-by-assigned-to'
+    assert_includes issue_list_results.fetch('tableClass').split, 'sort-asc'
   end
 
   def test_index_sort_by_assigned_to_desc
@@ -1334,7 +1314,8 @@ class IssuesControllerTest < Redmine::ControllerTest
 
     assignees = issues_in_list.filter_map(&:assigned_to)
     assert_equal assignees.sort.reverse, assignees
-    assert_select 'table.issues.sort-by-assigned-to.sort-desc'
+    assert_includes issue_list_results.fetch('tableClass').split, 'sort-by-assigned-to'
+    assert_includes issue_list_results.fetch('tableClass').split, 'sort-desc'
   end
 
   def test_index_group_by_assigned_to
@@ -1384,13 +1365,15 @@ class IssuesControllerTest < Redmine::ControllerTest
   def test_index_sort_by_last_updated_by
     get(:index, :params => {:sort => 'last_updated_by'})
     assert_response :success
-    assert_select 'table.issues.sort-by-last-updated-by.sort-asc'
+    assert_includes issue_list_results.fetch('tableClass').split, 'sort-by-last-updated-by'
+    assert_includes issue_list_results.fetch('tableClass').split, 'sort-asc'
   end
 
   def test_index_sort_by_last_updated_by_desc
     get(:index, :params => {:sort => 'last_updated_by:desc'})
     assert_response :success
-    assert_select 'table.issues.sort-by-last-updated-by.sort-desc'
+    assert_includes issue_list_results.fetch('tableClass').split, 'sort-by-last-updated-by'
+    assert_includes issue_list_results.fetch('tableClass').split, 'sort-desc'
   end
 
   def test_index_sort_by_spent_hours
@@ -1479,14 +1462,8 @@ class IssuesControllerTest < Redmine::ControllerTest
     )
     assert_response :success
 
-    # query should use specified columns + id and checkbox
-    assert_select 'table.issues thead' do
-      assert_select 'th', columns.size + 2
-      assert_select 'th.tracker'
-      assert_select 'th.subject'
-      assert_select 'th.assigned_to'
-      assert_select 'th.buttons'
-    end
+    # The results include the requested display columns and an issue ID.
+    assert_equal %w(id tracker subject assigned_to), issue_list_columns.pluck('key')
 
     # columns should be stored in session
     assert_kind_of Hash, session[:issue_query]
@@ -1553,10 +1530,9 @@ class IssuesControllerTest < Redmine::ControllerTest
 
     # query should use specified columns
     assert_equal ["#", "Tracker", "Subject", "Searchable field"], columns_in_issues_list
-    assert_select 'table.issues' do
-      assert_select 'th.cf_2.string'
-      assert_select 'td.cf_2.string'
-    end
+    column = issue_list_columns.find {|candidate| candidate.fetch('key') == 'cf_2'}
+    assert_includes column.fetch('cssClass').split, 'string'
+    assert_not_empty issue_list_cells('cf_2')
   end
 
   def test_index_with_multi_custom_field_column
@@ -1574,7 +1550,7 @@ class IssuesControllerTest < Redmine::ControllerTest
     )
     assert_response :success
 
-    assert_select 'table.issues td.cf_1', :text => 'MySQL, Oracle'
+    assert_includes columns_values_in_list('cf_1'), 'MySQL, Oracle'
   end
 
   def test_index_with_multi_user_custom_field_column
@@ -1596,11 +1572,9 @@ class IssuesControllerTest < Redmine::ControllerTest
       }
     )
     assert_response :success
-    assert_select "table.issues td.cf_#{field.id}" do
-      assert_select 'a', 2
-      assert_select 'a[href=?]', '/users/2', :text => 'John Smith'
-      assert_select 'a[href=?]', '/users/3', :text => 'Dave Lopper'
-    end
+    cell = issue_list_cells("cf_#{field.id}").find {|fragment| fragment.css('a').size == 2}
+    assert_equal [['/users/2', 'John Smith'], ['/users/3', 'Dave Lopper']],
+                 cell.css('a').map {|link| [link['href'], link.text]}
   end
 
   def test_index_with_date_column
@@ -1613,10 +1587,8 @@ class IssuesControllerTest < Redmine::ControllerTest
           :c => %w(start_date)
         }
       )
-      assert_select 'table.issues' do
-        assert_select 'th.start_date'
-        assert_select 'td.start_date', :text => '24/08/1987'
-      end
+      assert_includes issue_list_columns.pluck('cssClass'), 'start_date'
+      assert_includes columns_values_in_list('start_date'), '24/08/1987'
     end
   end
 
@@ -1629,11 +1601,7 @@ class IssuesControllerTest < Redmine::ControllerTest
         :c => %w(done_ratio)
       }
     )
-    assert_select 'table.issues td.done_ratio' do
-      assert_select 'table.progress' do
-        assert_select 'td.closed[style=?]', 'width: 40%;'
-      end
-    end
+    assert issue_list_cells('done_ratio').any? {|cell| cell.at_css('table.progress td.closed[style="width: 40%;"]')}
   end
 
   def test_index_with_spent_hours_column
@@ -1645,8 +1613,8 @@ class IssuesControllerTest < Redmine::ControllerTest
         :c => %w(subject spent_hours)
       }
     )
-    assert_select 'table.issues tr#issue-3 td.spent_hours', :text => '1:00'
-    assert_select 'table.issues tr#issue-2 td.spent_hours', :text => ''
+    assert_equal '1:00', issue_list_cells('spent_hours', issue_id: 3).sole.text
+    assert_equal '', issue_list_cells('spent_hours', issue_id: 2).sole.text
   end
 
   def test_index_with_total_spent_hours_column
@@ -1658,8 +1626,8 @@ class IssuesControllerTest < Redmine::ControllerTest
         :c => %w(subject total_spent_hours)
       }
     )
-    assert_select 'table.issues tr#issue-3 td.total_spent_hours', :text => '1:00'
-    assert_select 'table.issues tr#issue-2 td.total_spent_hours', :text => ''
+    assert_equal '1:00', issue_list_cells('total_spent_hours', issue_id: 3).sole.text
+    assert_equal '', issue_list_cells('total_spent_hours', issue_id: 2).sole.text
   end
 
   def test_index_with_total_estimated_hours_column
@@ -1670,7 +1638,7 @@ class IssuesControllerTest < Redmine::ControllerTest
         :c => %w(subject total_estimated_hours)
       }
     )
-    assert_select 'table.issues td.total_estimated_hours'
+    assert_not_empty issue_list_cells('total_estimated_hours')
   end
 
   def test_index_should_not_show_spent_hours_column_without_permission
@@ -1682,7 +1650,7 @@ class IssuesControllerTest < Redmine::ControllerTest
         :c => %w(subject spent_hours)
       }
     )
-    assert_select 'td.spent_hours', 0
+    assert_empty issue_list_cells('spent_hours')
   end
 
   def test_index_with_fixed_version_column
@@ -1693,9 +1661,8 @@ class IssuesControllerTest < Redmine::ControllerTest
         :c => %w(fixed_version)
       }
     )
-    assert_select 'table.issues td.fixed_version' do
-      assert_select 'a[href=?]', '/versions/2', :text => 'eCookbook - 1.0'
-    end
+    fixed_versions = issue_list_cells('fixed_version').flat_map {|cell| cell.css('a[href="/versions/2"]').map(&:text)}
+    assert_includes fixed_versions, 'eCookbook - 1.0'
   end
 
   def test_index_with_relations_column
@@ -1728,19 +1695,10 @@ class IssuesControllerTest < Redmine::ControllerTest
       }
     )
     assert_response :success
-    assert_select "tr#issue-1 td.relations" do
-      assert_select "span", 3
-      assert_select "span", :text => "Related to #7"
-      assert_select "span", :text => "Related to #8"
-      assert_select "span", :text => "Blocks #11"
-    end
-    assert_select "tr#issue-2 td.relations" do
-      assert_select "span", 1
-      assert_select "span", :text => "Blocked by #12"
-    end
-    assert_select "tr#issue-3 td.relations" do
-      assert_select "span", 0
-    end
+    assert_equal ['Related to #7', 'Related to #8', 'Blocks #11'],
+                 issue_list_cells('relations', issue_id: 1).sole.css('span').map(&:text)
+    assert_equal ['Blocked by #12'], issue_list_cells('relations', issue_id: 2).sole.css('span').map(&:text)
+    assert_empty issue_list_cells('relations', issue_id: 3).sole.css('span')
 
     get(
       :index,
@@ -1777,8 +1735,8 @@ class IssuesControllerTest < Redmine::ControllerTest
         :c => %w(subject description)
       }
     )
-    assert_select 'table.issues thead th', 4 # columns: chekbox + id + subject
-    assert_select 'td.description[colspan="4"]', :text => 'Unable to print recipes'
+    assert_equal %w(id subject), issue_list_columns.pluck('key')
+    assert_includes issue_list_blocks('description').map {|block| Nokogiri::HTML.fragment(block.fetch('content')).text.strip}, 'Unable to print recipes'
 
     get(
       :index,
@@ -1802,13 +1760,11 @@ class IssuesControllerTest < Redmine::ControllerTest
         }
       )
       assert_response :success
-      assert_select 'table.issues thead th', 4 # columns: chekbox + id + subject
+      assert_equal %w(id subject), issue_list_columns.pluck('key')
 
-      assert_select 'td.last_notes[colspan="4"]', :text => 'Some notes with Redmine links: #2, r2.'
-      assert_select(
-        'td.last_notes[colspan="4"]',
-        :text => 'A comment with inline image: and a reference to #1 and r2.'
-      )
+      notes = issue_list_blocks('last_notes').map {|block| Nokogiri::HTML.fragment(block.fetch('content')).text.squish}
+      assert_includes notes, 'Some notes with Redmine links: #2, r2.'
+      assert_includes notes, 'A comment with inline image: and a reference to #1 and r2.'
       get(
         :index,
         :params => {
@@ -1843,7 +1799,7 @@ class IssuesControllerTest < Redmine::ControllerTest
       }
     )
     assert_response :success
-    assert_select 'td.last_notes[colspan="4"]', :text => 'Privates notes'
+    assert_includes issue_list_blocks('last_notes').map {|block| Nokogiri::HTML.fragment(block.fetch('content')).text.strip}, 'Privates notes'
 
     Role.find(1).remove_permission! :view_private_notes
     get(
@@ -1854,7 +1810,7 @@ class IssuesControllerTest < Redmine::ControllerTest
       }
     )
     assert_response :success
-    assert_select 'td.last_notes[colspan="4"]', :text => 'Public notes'
+    assert_includes issue_list_blocks('last_notes').map {|block| Nokogiri::HTML.fragment(block.fetch('content')).text.strip}, 'Public notes'
   end
 
   def test_index_with_description_and_last_notes_columns_should_display_column_name
@@ -1866,8 +1822,8 @@ class IssuesControllerTest < Redmine::ControllerTest
       }
     )
     assert_response :success
-    assert_select 'td.last_notes[colspan="4"] span', :text => 'Last notes'
-    assert_select 'td.description[colspan="4"] span', :text => 'Description'
+    assert_includes issue_list_blocks('last_notes').pluck('caption'), 'Last notes'
+    assert_includes issue_list_blocks('description').pluck('caption'), 'Description'
   end
 
   def test_index_with_full_width_layout_custom_field_column_should_show_column_as_block_column
@@ -1888,8 +1844,8 @@ class IssuesControllerTest < Redmine::ControllerTest
       }
     )
     assert_response :success
-    assert_select 'td.description[colspan="4"] span', :text => 'Description'
-    assert_select "td.cf_#{field.id} span", :text => 'Long text'
+    assert_includes issue_list_blocks('description').pluck('caption'), 'Description'
+    assert_includes issue_list_blocks("cf_#{field.id}").pluck('caption'), 'Long text'
   end
 
   def test_index_with_parent_column
@@ -1897,8 +1853,9 @@ class IssuesControllerTest < Redmine::ControllerTest
     parent = Issue.generate!
     child = Issue.generate!(:parent_issue_id => parent.id)
     get(:index, :params => {:c => %w(parent)})
-    assert_select 'td.parent', :text => "#{parent.tracker} ##{parent.id}"
-    assert_select 'td.parent a[title=?]', parent.subject
+    cell = issue_list_cells('parent', issue_id: child.id).sole
+    assert_equal "#{parent.tracker} ##{parent.id}", cell.text
+    assert_equal parent.subject, cell.at_css('a')['title']
   end
 
   def test_index_with_parent_subject_column
@@ -1906,12 +1863,9 @@ class IssuesControllerTest < Redmine::ControllerTest
     parent = Issue.generate!
     child = Issue.generate!(:parent_issue_id => parent.id)
     get(:index, :params => {:c => %w(parent.subject)})
-    assert_select 'table.issues' do
-      assert_select 'th.parent-subject', :text => l(:field_parent_issue_subject)
-      assert_select "tr#issue-#{child.id}" do
-        assert_select 'td.parent-subject', :text => parent.subject
-      end
-    end
+    column = issue_list_columns.find {|candidate| candidate.fetch('cssClass') == 'parent-subject'}
+    assert_equal l(:field_parent_issue_subject), column.fetch('caption')
+    assert_equal parent.subject, issue_list_cells('parent-subject', issue_id: child.id).sole.text
   end
 
   def test_index_with_last_updated_by_column
@@ -1923,8 +1877,7 @@ class IssuesControllerTest < Redmine::ControllerTest
         :set_filter => '1'
       }
     )
-    assert_select 'td.last_updated_by'
-    assert_equal ["John Smith", "John Smith", ""], css_select('td.last_updated_by').map(&:text)
+    assert_equal ["John Smith", "John Smith", ""], columns_values_in_list('last_updated_by')
   end
 
   def test_index_with_attachments_column
@@ -1937,19 +1890,11 @@ class IssuesControllerTest < Redmine::ControllerTest
       }
     )
     assert_response :success
-    assert_select 'td.attachments'
-    assert_select 'tr#issue-2' do
-      assert_select 'td.attachments' do
-        assert_select 'span:nth-of-type(1)' do
-          assert_select 'a[href=?]', '/attachments/4', :text => 'source.rb'
-          assert_select 'a[href=?].icon-download', '/attachments/download/4/source.rb'
-        end
-        assert_select 'span:nth-of-type(2)' do
-          assert_select 'a[href=?]', '/attachments/10', :text => 'picture.jpg'
-          assert_select 'a[href=?].icon-download', '/attachments/download/10/picture.jpg'
-        end
-      end
-    end
+    cell = issue_list_cells('attachments', issue_id: 2).sole
+    assert_equal 'source.rb', cell.at_css('a[href="/attachments/4"]').text
+    assert cell.at_css('a[href="/attachments/download/4/source.rb"].icon-download')
+    assert_equal 'picture.jpg', cell.at_css('a[href="/attachments/10"]').text
+    assert cell.at_css('a[href="/attachments/download/10/picture.jpg"].icon-download')
   end
 
   def test_index_with_attachments_column_as_csv
@@ -1978,13 +1923,9 @@ class IssuesControllerTest < Redmine::ControllerTest
     )
 
     assert_response :success
-    assert_select 'td.watcher_users'
-    assert_select 'tr#issue-2' do
-      assert_select 'td.watcher_users' do
-        assert_select 'a[href=?]', '/users/1', :text => User.find(1).name
-        assert_select 'a[href=?]', '/users/3', :text => User.find(3).name
-      end
-    end
+    cell = issue_list_cells('watcher_users', issue_id: 2).sole
+    assert_equal User.find(1).name, cell.at_css('a[href="/users/1"]').text
+    assert_equal User.find(3).name, cell.at_css('a[href="/users/3"]').text
   end
 
   def test_index_with_watchers_column_only_visible_watchers
@@ -2000,15 +1941,7 @@ class IssuesControllerTest < Redmine::ControllerTest
     )
 
     assert_response :success
-    assert_select 'td.watcher_users'
-    assert_select 'tr#issue-2' do
-      assert_select 'td.watcher_users' do
-        assert_select 'a[href=?]', '/users/1', 0
-        # Currently not implemented, see https://www.redmine.org/issues/29894#note-17
-        # You can only know that you are a watcher yourself
-        # assert_select 'a[href=?]', '/users/3', :text => User.find(3).name
-      end
-    end
+    assert_nil issue_list_cells('watcher_users', issue_id: 2).sole.at_css('a[href="/users/1"]')
   end
 
   def test_index_with_watchers_column_as_csv
@@ -2060,14 +1993,9 @@ class IssuesControllerTest < Redmine::ControllerTest
     assert_response :success
     assert_select '.query-totals'
     assert_select '.query-totals .total-for-estimated-hours span.value', :text => '13:30'
-    assert_select 'tr.group', :text => /Printing/ do
-      assert_select '.total-for-estimated-hours span.value', :text => '7:48'
-    end
-    assert_select 'tr.group', :text => /Recipes/ do
-      assert_select '.total-for-estimated-hours span.value', :text => '1:06'
-    end
-    assert_select 'tr.group', :text => /blank/ do
-      assert_select '.total-for-estimated-hours span.value', :text => '4:36'
+    {'Printing' => '7:48', 'Recipes' => '1:06', '(blank)' => '4:36'}.each do |group_name, hours|
+      totals = Nokogiri::HTML.fragment(issue_list_group(group_name).fetch('totals'))
+      assert_equal hours, totals.at_css('.total-for-estimated-hours span.value').text
     end
   end
 
@@ -2088,10 +2016,8 @@ class IssuesControllerTest < Redmine::ControllerTest
     )
     assert_response :success
 
-    assert_select 'tr.group' do
-      assert_select 'span.name'
-      assert_select 'span.badge-count.count', 0
-    end
+    assert_not_empty issue_list_groups
+    assert issue_list_groups.all? {|group| group.fetch('name').present? && group.fetch('count').nil?}
   end
 
   def test_index_with_int_custom_field_total
@@ -2283,10 +2209,10 @@ class IssuesControllerTest < Redmine::ControllerTest
           :c => %w(estimated_hours total_estimated_hours spent_hours total_spent_hours)
         }
       )
-      assert_select 'table.issues tr#issue-1 td.estimated_hours', :text => '200:00'
-      assert_select 'table.issues tr#issue-1 td.total_estimated_hours', :text => '200:00'
-      assert_select 'table.issues tr#issue-1 td.spent_hours', :text => '154:15'
-      assert_select 'table.issues tr#issue-1 td.total_spent_hours', :text => '154:15'
+      assert_equal '200:00', issue_list_cells('estimated_hours', issue_id: 1).sole.text
+      assert_equal '200:00', issue_list_cells('total_estimated_hours', issue_id: 1).sole.text
+      assert_equal '154:15', issue_list_cells('spent_hours', issue_id: 1).sole.text
+      assert_equal '154:15', issue_list_cells('total_spent_hours', issue_id: 1).sole.text
     end
   end
 
@@ -2303,12 +2229,8 @@ class IssuesControllerTest < Redmine::ControllerTest
       assert_select 'span.dropdown-items a', {:count => 0, :text => 'Delete issue'}
     end
     # anonymous role is allowed to add a note
-    assert_select 'form#issue-form' do
-      assert_select 'fieldset' do
-        assert_select 'legend', :text => 'Notes'
-        assert_select 'textarea[name=?]', 'issue[notes]'
-      end
-    end
+    assert_equal 'Notes', issue_editor_props.fetch('labels').fetch('notes')
+    assert_select issue_editor_widget('notesHtml'), 'textarea[name=?]', 'issue[notes]'
     assert_select 'title', :text => "Bug #1: Cannot print recipes - eCookbook - Redmine"
   end
 
@@ -2324,20 +2246,12 @@ class IssuesControllerTest < Redmine::ControllerTest
       assert_select 'span.dropdown-items a', {:count => 1, :text => 'Copy link'}
       assert_select 'span.dropdown-items a', {:count => 1, :text => 'Delete issue'}
     end
-    assert_select 'form#issue-form' do
-      assert_select 'fieldset' do
-        assert_select 'legend', :text => 'Change properties'
-        assert_select 'input[name=?]', 'issue[subject]'
-      end
-      assert_select 'fieldset' do
-        assert_select 'legend', :text => 'Log time'
-        assert_select 'input[name=?]', 'time_entry[hours]'
-      end
-      assert_select 'fieldset' do
-        assert_select 'legend', :text => 'Notes'
-        assert_select 'textarea[name=?]', 'issue[notes]'
-      end
-    end
+    assert_equal 'Change properties', issue_editor_props.fetch('labels').fetch('properties')
+    assert_equal 'text', issue_editor_field('subject').fetch('kind')
+    assert_select issue_editor_widget('timeHtml'), 'legend', text: 'Log time'
+    assert_select issue_editor_widget('timeHtml'), 'input[name=?]', 'time_entry[hours]'
+    assert_equal 'Notes', issue_editor_props.fetch('labels').fetch('notes')
+    assert_select issue_editor_widget('notesHtml'), 'textarea[name=?]', 'issue[notes]'
     # Add links for subtasks and related issues
     assert_select 'div#issue_tree div.contextual a.icon.icon-add', :text => /Add/
     assert_select 'div#relations div.contextual a.icon.icon-link-add', :text => /Add/
@@ -2391,25 +2305,21 @@ class IssuesControllerTest < Redmine::ControllerTest
     @request.session[:user_id] = 2
     get(:show, :params => {:id => 1})
     assert_response :success
-    assert_select 'form#issue-form' do
-      assert_select 'input[name=?]', 'issue[is_private]'
-      assert_select 'select[name=?]', 'issue[project_id]'
-      assert_select 'select[name=?]', 'issue[tracker_id]'
-      assert_select 'input[name=?]', 'issue[subject]'
-      assert_select 'textarea[name=?]', 'issue[description]'
-      assert_select 'select[name=?]', 'issue[status_id]'
-      assert_select 'select[name=?]', 'issue[priority_id]'
-      assert_select 'select[name=?]', 'issue[assigned_to_id]'
-      assert_select 'select[name=?]', 'issue[category_id]'
-      assert_select 'select[name=?]', 'issue[fixed_version_id]'
-      assert_select 'input[name=?]', 'issue[parent_issue_id]'
-      assert_select 'input[name=?]', 'issue[start_date]'
-      assert_select 'input[name=?]', 'issue[due_date]'
-      assert_select 'select[name=?]', 'issue[done_ratio]'
-      assert_select 'input[name=?]', 'issue[custom_field_values][2]'
-      assert_select 'input[name=?]', 'issue[watcher_user_ids][]', 0
-      assert_select 'textarea[name=?]', 'issue[notes]'
+    expected_fields = {
+      'is_private' => 'checkbox', 'project_id' => 'select', 'tracker_id' => 'select',
+      'subject' => 'text', 'description' => 'wiki', 'status_id' => 'select', 'priority_id' => 'select',
+      'assigned_to_id' => 'select', 'category_id' => 'select', 'fixed_version_id' => 'select',
+      'parent_issue_id' => 'text', 'start_date' => 'date', 'due_date' => 'date', 'done_ratio' => 'select'
+    }
+    fields = issue_editor_fields.index_by {|field| field.fetch('name')}
+    expected_fields.each do |name, kind|
+      assert_equal kind, fields.fetch(name).fetch('kind'), name
     end
+    assert_select Nokogiri::HTML.fragment(fields.fetch('description').fetch('html')),
+                  'textarea[name=?]', 'issue[description]'
+    assert_select issue_editor_custom_field(2), 'input[name=?]', 'issue[custom_field_values][2]'
+    assert_not_includes fields.keys, 'watcher_user_ids'
+    assert_select issue_editor_widget('notesHtml'), 'textarea[name=?]', 'issue[notes]'
   end
 
   def test_show_should_display_update_form_with_minimal_permissions
@@ -2418,25 +2328,9 @@ class IssuesControllerTest < Redmine::ControllerTest
     @request.session[:user_id] = 2
     get(:show, :params => {:id => 1})
     assert_response :success
-    assert_select 'form#issue-form' do
-      assert_select 'input[name=?]', 'issue[is_private]', 0
-      assert_select 'select[name=?]', 'issue[project_id]', 0
-      assert_select 'select[name=?]', 'issue[tracker_id]', 0
-      assert_select 'input[name=?]', 'issue[subject]', 0
-      assert_select 'textarea[name=?]', 'issue[description]', 0
-      assert_select 'select[name=?]', 'issue[status_id]', 0
-      assert_select 'select[name=?]', 'issue[priority_id]', 0
-      assert_select 'select[name=?]', 'issue[assigned_to_id]', 0
-      assert_select 'select[name=?]', 'issue[category_id]', 0
-      assert_select 'select[name=?]', 'issue[fixed_version_id]', 0
-      assert_select 'input[name=?]', 'issue[parent_issue_id]', 0
-      assert_select 'input[name=?]', 'issue[start_date]', 0
-      assert_select 'input[name=?]', 'issue[due_date]', 0
-      assert_select 'select[name=?]', 'issue[done_ratio]', 0
-      assert_select 'input[name=?]', 'issue[custom_field_values][2]', 0
-      assert_select 'input[name=?]', 'issue[watcher_user_ids][]', 0
-      assert_select 'textarea[name=?]', 'issue[notes]'
-    end
+    assert_empty issue_editor_fields
+    assert_empty issue_editor_schema.fetch('customFields')
+    assert_select issue_editor_widget('notesHtml'), 'textarea[name=?]', 'issue[notes]'
   end
 
   def test_show_should_not_display_update_form_without_permissions
@@ -2444,7 +2338,7 @@ class IssuesControllerTest < Redmine::ControllerTest
     @request.session[:user_id] = 2
     get(:show, :params => {:id => 1})
     assert_response :success
-    assert_select 'form#issue-form', 0
+    assert_select '[data-issue-editor]', 0
   end
 
   def test_update_form_should_not_display_inactive_enumerations
@@ -2452,20 +2346,15 @@ class IssuesControllerTest < Redmine::ControllerTest
     @request.session[:user_id] = 2
     get(:show, :params => {:id => 1})
     assert_response :success
-    assert_select 'form#issue-form' do
-      assert_select 'select[name=?]', 'issue[priority_id]' do
-        assert_select 'option[value="4"]'
-        assert_select 'option[value="15"]', 0
-      end
-    end
+    options = issue_editor_options('priority_id')
+    assert_select options, 'option[value="4"]'
+    assert_select options, 'option[value="15"]', 0
   end
 
   def test_update_form_should_allow_attachment_upload
     @request.session[:user_id] = 2
     get(:show, :params => {:id => 1})
-    assert_select 'form#issue-form[method=post][enctype="multipart/form-data"]' do
-      assert_select 'input[type=file][name=?]', 'attachments[dummy][file]'
-    end
+    assert_select issue_editor_widget('attachmentsHtml'), 'input[type=file][name=?]', 'attachments[dummy][file]'
   end
 
   def test_update_form_should_render_assign_to_me_link_when_issue_can_be_assigned_to_the_current_user
@@ -2476,9 +2365,10 @@ class IssuesControllerTest < Redmine::ControllerTest
         :id => 10
       }
     )
-    assert_select 'form#issue-form #attributes' do
-      assert_select 'a[class=?][data-id=?]', 'assign-to-me-link', '1', 1
-    end
+    field = issue_editor_field('assigned_to_id')
+    assert_equal 'Assign to me', field.fetch('assignToMe')
+    assert_equal '1', field.fetch('userId')
+    assert_not_equal field.fetch('userId'), field.fetch('value')
   end
 
   def test_update_form_should_not_render_assign_to_me_link_when_issue_cannot_be_assigned_to_the_current_user
@@ -2489,9 +2379,7 @@ class IssuesControllerTest < Redmine::ControllerTest
         :id => 2
       }
     )
-    assert_select 'form#issue-form #attributes' do
-      assert_select 'a[class=?]', 'assign-to-me-link', 0
-    end
+    assert_nil issue_editor_field('assigned_to_id').fetch('assignToMe')
   end
 
   def test_update_form_should_not_show_assign_to_me_link_when_issue_is_assigned_to_the_current_user
@@ -2506,9 +2394,10 @@ class IssuesControllerTest < Redmine::ControllerTest
         :id => 10
       }
     )
-    assert_select 'form#issue-form #attributes' do
-      assert_select 'a[class=?]', 'assign-to-me-link hidden', 1
-    end
+    field = issue_editor_field('assigned_to_id')
+    assert_equal 'Assign to me', field.fetch('assignToMe')
+    assert_equal '1', field.fetch('userId')
+    assert_equal field.fetch('userId'), field.fetch('value')
   end
 
   def test_show_should_deny_anonymous_access_without_permission
@@ -6289,13 +6178,11 @@ class IssuesControllerTest < Redmine::ControllerTest
     get(:edit, :params => {:id => 1})
     assert_response :success
 
-    assert_select 'select[name=?]', 'issue[project_id]'
+    assert_equal 'select', issue_editor_field('project_id').fetch('kind')
     # Be sure we don't display inactive IssuePriorities
     assert_not IssuePriority.find(15).active?
-    assert_select 'select[name=?]', 'issue[priority_id]' do
-      assert_select 'option[value="15"]', 0
-    end
-    assert_select 'span.icon-warning', 0
+    assert_select issue_editor_options('priority_id'), 'option[value="15"]', 0
+    assert_nil issue_editor_field('status_id').fetch('actions').fetch('warning')
   end
 
   def test_edit_should_hide_project_if_user_is_not_allowed_to_change_project
@@ -6305,7 +6192,7 @@ class IssuesControllerTest < Redmine::ControllerTest
     @request.session[:user_id] = 2
     get(:edit, :params => {:id => 1})
     assert_response :success
-    assert_select 'select[name=?]', 'issue[project_id]', 0
+    assert_not_includes issue_editor_fields.pluck('name'), 'project_id'
   end
 
   def test_new_should_hide_project_if_user_is_not_allowed_to_change_project_in_hierarchy_projects
@@ -6344,21 +6231,21 @@ class IssuesControllerTest < Redmine::ControllerTest
       }
     )
     assert_response :success
-    assert_select 'select[name=?]', 'issue[project_id]'
+    assert_equal 'select', issue_editor_field('project_id').fetch('kind')
   end
 
   def test_get_edit_should_display_the_time_entry_form_with_log_time_permission
     @request.session[:user_id] = 2
     Role.find_by_name('Manager').update_attribute :permissions, [:view_issues, :edit_issues, :log_time]
     get(:edit, :params => {:id => 1})
-    assert_select 'input[name=?]', 'time_entry[hours]'
+    assert_select issue_editor_widget('timeHtml'), 'input[name=?]', 'time_entry[hours]'
   end
 
   def test_get_edit_should_not_display_the_time_entry_form_without_log_time_permission
     @request.session[:user_id] = 2
     Role.find_by_name('Manager').remove_permission! :log_time
     get(:edit, :params => {:id => 1})
-    assert_select 'input[name=?]', 'time_entry[hours]', 0
+    assert_nil issue_editor_schema.fetch('timeHtml')
   end
 
   def test_get_edit_should_not_display_the_time_entry_form_on_closed_issue
@@ -6367,7 +6254,7 @@ class IssuesControllerTest < Redmine::ControllerTest
       issue = Issue.find(1)
       issue.update :status => IssueStatus.find(5)
       get(:edit, :params => {:id => 1})
-      assert_select 'input[name=?]', 'time_entry[hours]', 0
+      assert_nil issue_editor_schema.fetch('timeHtml')
     end
   end
 
@@ -6390,19 +6277,17 @@ class IssuesControllerTest < Redmine::ControllerTest
     )
     assert_response :success
 
-    assert_select 'select[name=?]', 'issue[status_id]' do
-      assert_select 'option[value="5"][selected=selected]', :text => 'Closed'
-    end
+    assert_equal '5', issue_editor_field('status_id').fetch('value')
+    assert_select issue_editor_options('status_id'), 'option[value="5"]', text: 'Closed'
+    assert_equal '7', issue_editor_field('priority_id').fetch('value')
+    assert_select issue_editor_options('priority_id'), 'option[value="7"]', text: 'Urgent'
 
-    assert_select 'select[name=?]', 'issue[priority_id]' do
-      assert_select 'option[value="7"][selected=selected]', :text => 'Urgent'
-    end
-
-    assert_select 'input[name=?][value="2:30"]', 'time_entry[hours]'
-    assert_select 'select[name=?]', 'time_entry[activity_id]' do
+    time = issue_editor_widget('timeHtml')
+    assert_select time, 'input[name=?][value="2:30"]', 'time_entry[hours]'
+    assert_select time, 'select[name=?]', 'time_entry[activity_id]' do
       assert_select 'option[value="10"][selected=selected]', :text => 'Development'
     end
-    assert_select 'input[name=?][value=test_get_edit_with_params]', 'time_entry[comments]'
+    assert_select time, 'input[name=?][value=test_get_edit_with_params]', 'time_entry[comments]'
   end
 
   def test_get_edit_with_multi_custom_field
@@ -6416,7 +6301,7 @@ class IssuesControllerTest < Redmine::ControllerTest
     get(:edit, :params => {:id => 1})
     assert_response :success
 
-    assert_select 'select[name=?][multiple=multiple]', 'issue[custom_field_values][1][]' do
+    assert_select issue_editor_custom_field(1), 'select[name=?][multiple=multiple]', 'issue[custom_field_values][1][]' do
       assert_select 'option', 3
       assert_select 'option[value=MySQL][selected=selected]'
       assert_select 'option[value=Oracle][selected=selected]'
@@ -6431,7 +6316,7 @@ class IssuesControllerTest < Redmine::ControllerTest
     get(:edit, :params => {:id => 1})
     assert_response :success
 
-    assert_select "select[id=?]", "issue_custom_field_values_#{cf.id}", 1
+    assert_select issue_editor_custom_field(cf.id), 'select[id=?]', "issue_custom_field_values_#{cf.id}", 1
   end
 
   def test_get_edit_with_me_assigned_to_id
@@ -6444,9 +6329,8 @@ class IssuesControllerTest < Redmine::ControllerTest
       }
     )
     assert_response :success
-    assert_select 'select[name=?]', 'issue[assigned_to_id]' do
-      assert_select 'option[value="2"][selected=selected]'
-    end
+    assert_equal '2', issue_editor_field('assigned_to_id').fetch('value')
+    assert_select issue_editor_options('assigned_to_id'), 'option[value="2"]'
   end
 
   def test_get_edit_for_issue_with_transition_warning_should_show_the_warning
@@ -6461,10 +6345,11 @@ class IssuesControllerTest < Redmine::ControllerTest
 
     assert_response :success
     reason = l(:notice_issue_not_closable_by_blocking_issue)
-    assert_select 'span.icon-warning[title=?]', reason do
-      assert_select "svg.icon-svg use:match('href', ?)", %r{assets/icons-[0-9a-f]+.svg#icon--warning}
-      assert_select 'span.icon-label', test: reason
-    end
+    actions = issue_editor_field('status_id').fetch('actions')
+    assert_equal reason, actions.fetch('warning')
+    icon = Nokogiri::HTML.fragment(actions.fetch('warningIcon'))
+    assert_select icon, "svg.icon-svg use:match('href', ?)", %r{assets/icons-[0-9a-f]+.svg#icon--warning}
+    assert_select icon, 'span.icon-label', text: l(:notice_issue_not_closable_by_open_tasks)
   end
 
   def test_get_edit_should_display_visible_spent_time_custom_field
@@ -6479,7 +6364,7 @@ class IssuesControllerTest < Redmine::ControllerTest
 
     assert_response :success
 
-    assert_select '#issue-form select.cf_10', 1
+    assert_select issue_editor_widget('timeHtml'), 'select.cf_10', 1
   end
 
   def test_get_edit_should_not_display_spent_time_custom_field_not_visible
@@ -6499,7 +6384,7 @@ class IssuesControllerTest < Redmine::ControllerTest
 
     assert_response :success
 
-    assert_select '#issue-form select.cf_10', 0
+    assert_select issue_editor_widget('timeHtml'), 'select.cf_10', 0
   end
 
   def test_update_form_for_existing_issue
@@ -6545,6 +6430,8 @@ class IssuesControllerTest < Redmine::ControllerTest
     WorkflowTransition.create!(:role_id => 1, :tracker_id => 2, :old_status_id => 2, :new_status_id => 1)
     WorkflowTransition.create!(:role_id => 1, :tracker_id => 2, :old_status_id => 2, :new_status_id => 5)
     WorkflowTransition.create!(:role_id => 1, :tracker_id => 2, :old_status_id => 5, :new_status_id => 4)
+    @request.headers['Accept'] = 'application/json'
+    @request.headers['X-Redmine-Editor'] = 'fields'
     patch(
       :edit,
       :params => {
@@ -6556,16 +6443,18 @@ class IssuesControllerTest < Redmine::ControllerTest
         }
       }
     )
-    assert_select 'select[name=?]', 'issue[status_id]' do
-      assert_select 'option[value="1"]'
-      assert_select 'option[value="2"]'
-      assert_select 'option[value="5"][selected=selected]'
-      assert_select 'option', 3
-    end
+    assert_equal '5', issue_editor_field('status_id').fetch('value')
+    options = issue_editor_options('status_id')
+    assert_select options, 'option[value="1"]'
+    assert_select options, 'option[value="2"]'
+    assert_select options, 'option[value="5"]'
+    assert_select options, 'option', 3
   end
 
   def test_update_form_for_existing_issue_with_project_change
     @request.session[:user_id] = 2
+    @request.headers['Accept'] = 'application/json'
+    @request.headers['X-Redmine-Editor'] = 'fields'
     patch(
       :edit,
       :params => {
@@ -6580,13 +6469,11 @@ class IssuesControllerTest < Redmine::ControllerTest
       }
     )
     assert_response :success
-    assert_select 'select[name=?]', 'issue[project_id]' do
-      assert_select 'option[value="2"][selected=selected]'
-    end
-    assert_select 'select[name=?]', 'issue[tracker_id]' do
-      assert_select 'option[value="2"][selected=selected]'
-    end
-    assert_select 'input[name=?][value=?]', 'issue[subject]', 'This is the test_new issue'
+    assert_equal '2', issue_editor_field('project_id').fetch('value')
+    assert_select issue_editor_options('project_id'), 'option[value="2"]'
+    assert_equal '2', issue_editor_field('tracker_id').fetch('value')
+    assert_select issue_editor_options('tracker_id'), 'option[value="2"]'
+    assert_equal 'This is the test_new issue', issue_editor_field('subject').fetch('value')
   end
 
   def test_update_form_should_keep_category_with_same_when_changing_project
@@ -6597,6 +6484,8 @@ class IssuesControllerTest < Redmine::ControllerTest
     issue = Issue.generate!(:project => source, :category => source_category)
 
     @request.session[:user_id] = 1
+    @request.headers['Accept'] = 'application/json'
+    @request.headers['X-Redmine-Editor'] = 'fields'
     patch(
       :edit,
       :params => {
@@ -6609,22 +6498,22 @@ class IssuesControllerTest < Redmine::ControllerTest
     )
     assert_response :success
 
-    assert_select 'select[name=?]', 'issue[category_id]' do
-      assert_select 'option[value=?][selected=selected]', target_category.id.to_s
-    end
+    assert_equal target_category.id.to_s, issue_editor_field('category_id').fetch('value')
+    assert_select issue_editor_options('category_id'), 'option[value=?]', target_category.id.to_s
   end
 
   def test_update_form_should_propose_default_status_for_existing_issue
     @request.session[:user_id] = 2
     WorkflowTransition.delete_all
     WorkflowTransition.create!(:role_id => 1, :tracker_id => 2, :old_status_id => 2, :new_status_id => 3)
+    @request.headers['Accept'] = 'application/json'
+    @request.headers['X-Redmine-Editor'] = 'fields'
     patch(:edit, :params => {:id => 2})
     assert_response :success
-    assert_select 'select[name=?]', 'issue[status_id]' do
-      assert_select 'option[value="2"]'
-      assert_select 'option[value="3"]'
-      assert_select 'option', 2
-    end
+    options = issue_editor_options('status_id')
+    assert_select options, 'option[value="2"]'
+    assert_select options, 'option[value="3"]'
+    assert_select options, 'option', 2
   end
 
   def test_put_update_without_custom_fields_param
@@ -7024,7 +6913,7 @@ class IssuesControllerTest < Redmine::ControllerTest
     @request.session[:user_id] = 3
 
     get(:edit, :params => {:id => issue.id})
-    assert_select 'input[name=?][value=?]', 'issue[parent_issue_id]', parent.id.to_s
+    assert_equal parent.id.to_s, issue_editor_field('parent_issue_id').fetch('value')
 
     put(
       :update,
@@ -7120,8 +7009,9 @@ class IssuesControllerTest < Redmine::ControllerTest
     assert File.exist?(attachment.diskfile)
     assert_nil attachment.container
 
-    assert_select 'input[name=?][value=?]', 'attachments[p0][token]', attachment.token
-    assert_select 'input[name=?][value=?]', 'attachments[p0][filename]', 'testfile.txt'
+    attachments = issue_editor_widget('attachmentsHtml')
+    assert_select attachments, 'input[name=?][value=?]', 'attachments[p0][token]', attachment.token
+    assert_select attachments, 'input[name=?][value=?]', 'attachments[p0][filename]', 'testfile.txt'
   end
 
   def test_put_update_with_failure_should_keep_saved_attachments
@@ -7149,8 +7039,9 @@ class IssuesControllerTest < Redmine::ControllerTest
       end
     end
 
-    assert_select 'input[name=?][value=?]', 'attachments[p0][token]', attachment.token
-    assert_select 'input[name=?][value=?]', 'attachments[p0][filename]', 'testfile.txt'
+    attachments = issue_editor_widget('attachmentsHtml')
+    assert_select attachments, 'input[name=?][value=?]', 'attachments[p0][token]', attachment.token
+    assert_select attachments, 'input[name=?][value=?]', 'attachments[p0][filename]', 'testfile.txt'
   end
 
   def test_put_update_should_attach_saved_attachments
@@ -7258,9 +7149,10 @@ class IssuesControllerTest < Redmine::ControllerTest
         )
       end
     end
-    assert_select 'input[name=?][value="1"][checked=checked]', 'issue[deleted_attachment_ids][]'
-    assert_select 'input[name=?][value="5"][checked=checked]', 'issue[deleted_attachment_ids][]'
-    assert_select 'input[name=?][value="6"]:not([checked])', 'issue[deleted_attachment_ids][]'
+    attachments = issue_editor_widget('attachmentsHtml')
+    assert_select attachments, 'input[name=?][value="1"][checked=checked]', 'issue[deleted_attachment_ids][]'
+    assert_select attachments, 'input[name=?][value="5"][checked=checked]', 'issue[deleted_attachment_ids][]'
+    assert_select attachments, 'input[name=?][value="6"]:not([checked])', 'issue[deleted_attachment_ids][]'
   end
 
   def test_put_update_with_no_change
@@ -7328,9 +7220,9 @@ class IssuesControllerTest < Redmine::ControllerTest
     end
     assert_response :success
 
-    assert_select_error /Activity cannot be blank/
-    assert_select 'textarea[name=?]', 'issue[notes]', :text => notes
-    assert_select 'input[name=?][value=?]', 'time_entry[hours]', '2z'
+    assert_includes issue_editor_props.fetch('validationMessages'), 'Activity cannot be blank'
+    assert_select issue_editor_widget('notesHtml'), 'textarea[name=?]', 'issue[notes]', :text => notes
+    assert_select issue_editor_widget('timeHtml'), 'input[name=?][value=?]', 'time_entry[hours]', '2z'
   end
 
   def test_put_update_with_invalid_spent_time_comments_only
@@ -7353,10 +7245,10 @@ class IssuesControllerTest < Redmine::ControllerTest
     end
     assert_response :success
 
-    assert_select_error /Activity cannot be blank/
-    assert_select_error /Hours cannot be blank/
-    assert_select 'textarea[name=?]', 'issue[notes]', :text => notes
-    assert_select 'input[name=?][value=?]', 'time_entry[comments]', 'this is my comment'
+    assert_includes issue_editor_props.fetch('validationMessages'), 'Activity cannot be blank'
+    assert_includes issue_editor_props.fetch('validationMessages'), 'Hours cannot be blank'
+    assert_select issue_editor_widget('notesHtml'), 'textarea[name=?]', 'issue[notes]', :text => notes
+    assert_select issue_editor_widget('timeHtml'), 'input[name=?][value=?]', 'time_entry[comments]', 'this is my comment'
   end
 
   def test_put_with_spent_time_when_assigned_to_of_private_issue_is_update_at_the_same_time
@@ -9201,18 +9093,24 @@ class IssuesControllerTest < Redmine::ControllerTest
     user
   end
 
-  def test_cancel_edit_link_for_issue_show_action_should_have_onclick_action
+  def test_show_editor_supplies_cancel_context
     @request.session[:user_id] = 1
     get(:show, :params => {:id => 1})
     assert_response :success
-    assert_select 'a[href=?][onclick=?]', "/issues/1", "$('#update').hide(); return false;", :text => 'Cancel'
+    props = issue_editor_props
+    assert_equal true, props.fetch('embedded')
+    assert_equal '/issues/1', props.fetch('issueUrl')
+    assert_equal 'Cancel', props.fetch('labels').fetch('cancel')
   end
 
-  def test_cancel_edit_link_for_issue_edit_action_should_not_have_onclick_action
+  def test_edit_editor_supplies_cancel_context
     @request.session[:user_id] = 1
     get(:edit, :params => {:id => 1})
     assert_response :success
-    assert_select 'a[href=?][onclick=?]', "/issues/1", "", :text => 'Cancel'
+    props = issue_editor_props
+    assert_equal false, props.fetch('embedded')
+    assert_equal '/issues/1', props.fetch('issueUrl')
+    assert_equal 'Cancel', props.fetch('labels').fetch('cancel')
   end
 
   def test_show_should_display_author_avatar_only_when_not_assigned
@@ -9417,5 +9315,115 @@ class IssuesControllerTest < Redmine::ControllerTest
       assert_select 'thead.related-issues th', text: 'Status'
       assert_select 'thead.related-issues th', text: 'Total estimated time'
     end
+  end
+
+  private
+
+  def issue_list_page
+    page = JSON.parse(css_select('script[type="application/json"][data-page]').sole.content)
+    assert_equal 'Issues/Index', page.fetch('component')
+    page
+  end
+
+  def issue_list_results
+    issue_list_page.fetch('props').fetch('results') || {}
+  end
+
+  def issue_list_rows
+    issue_list_results.fetch('groups', []).flat_map {|group| group.fetch('rows')}
+  end
+
+  def issues_in_list
+    Issue.find(issue_list_rows.map {|row| row.fetch('id')})
+  end
+
+  def issue_list_columns
+    issue_list_results.fetch('columns', [])
+  end
+
+  def columns_in_issues_list
+    issue_list_columns.pluck('caption')
+  end
+
+  def issue_list_cells(column, issue_id: nil)
+    column_index = issue_list_columns.index do |candidate|
+      candidate.fetch('cssClass').split.include?(column)
+    end
+    return [] unless column_index
+
+    rows = issue_list_rows
+    rows = rows.select {|row| row.fetch('id') == issue_id} if issue_id
+    rows.map {|row| Nokogiri::HTML.fragment(row.fetch('cells').fetch(column_index))}
+  end
+
+  def columns_values_in_list(column)
+    issue_list_cells(column).map(&:text)
+  end
+
+  def assert_issue_list_link(issue_id, text)
+    link = issue_list_cells('subject', issue_id: issue_id).sole.at_css("a[href='/issues/#{issue_id}']")
+    assert_equal text, link.text
+  end
+
+  def issue_list_groups
+    issue_list_results.fetch('groups').filter_map {|group| group.fetch('heading')}
+  end
+
+  def issue_list_group(name)
+    issue_list_groups.find {|group| Nokogiri::HTML.fragment(group.fetch('name')).text == name}
+  end
+
+  def issue_list_blocks(column)
+    issue_list_rows.flat_map {|row| row.fetch('blocks')}.select {|block| block.fetch('key') == column}
+  end
+
+  def issue_editor_props
+    if @controller.action_name == 'show'
+      assert_select '#update [data-issue-editor]', count: 1
+      JSON.parse(css_select('#update [data-issue-editor]').first['data-issue-editor'])
+    else
+      assert_select 'script[type="application/json"][data-page]', count: 1
+      page = JSON.parse(css_select('script[type="application/json"][data-page]').first.content)
+      assert_equal 'Issues/Edit', page.fetch('component')
+      page.fetch('props')
+    end
+  end
+
+  def issue_editor_schema
+    if @request.headers['X-Redmine-Editor'] == 'fields'
+      assert_response :success
+      assert_equal 'application/json', response.media_type
+      response.parsed_body
+    else
+      issue_editor_props.fetch('schema')
+    end
+  end
+
+  def issue_editor_fields
+    issue_editor_schema.fetch('fields')
+  end
+
+  def issue_editor_field(name)
+    field = issue_editor_fields.find {|candidate| candidate.fetch('name') == name}
+    assert_not_nil field, "Expected the editor to supply the #{name} field"
+    field
+  end
+
+  def issue_editor_options(name)
+    field = issue_editor_field(name)
+    assert_equal 'select', field.fetch('kind')
+    Nokogiri::HTML.fragment(field.fetch('optionsHtml'))
+  end
+
+  def issue_editor_widget(name)
+    html = issue_editor_schema.fetch(name)
+    assert_not_nil html, "Expected the editor to supply #{name}"
+    Nokogiri::HTML.fragment(html)
+  end
+
+  def issue_editor_custom_field(id)
+    field = issue_editor_schema.fetch('customFields').find {|candidate| candidate.fetch('id') == id}
+    assert_not_nil field, "Expected the editor to supply custom field #{id}"
+    Nokogiri::HTML.fragment(field.fetch('html'))
   end
 end
